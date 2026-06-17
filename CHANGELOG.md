@@ -1,7 +1,23 @@
 # Changelog
 
-This changelog tracks the fork release version for vLLM 2080 Ti Definitive
+This changelog tracks the fork release version for vLLM Tesla T10 Definitive
 Edition. It is separate from the upstream vLLM package version.
+
+## v0.2.0 - 2026-06-17
+
+- Retargets the fork from dual RTX 2080 Ti 22GB to multi Tesla T10 16GB / SM75
+  serving with flexible tensor parallel size (TP=2/4/8).
+- Updates `launcher.sh` GPU detection: default `TARGET_GPU_PATTERN=t10`, selects
+  all matching Tesla T10 cards, and enforces `TP_SIZE == GPU_DEVICES` count.
+- Updates `build.sh` preflight for Tesla T10 name matching and 16GB VRAM
+  thresholds.
+- Adds experimental Tesla T10 profiles under `profiles/qwen27b/tp2/` and
+  `profiles/qwen27b/tp4/` plus sweep documentation in
+  `docs/qwen36-kv-throughput-sweep-t10.md`.
+- Preserves legacy dual 2080 Ti validated profiles under
+  `profiles/qwen27b/normal/...` as historical benchmark evidence.
+- Runtime identity becomes `vllm-sm75-tesla-t10-cu128`; CUDA arch remains
+  `TORCH_CUDA_ARCH_LIST=7.5`.
 
 ## v0.1.9 - 2026-06-15
 

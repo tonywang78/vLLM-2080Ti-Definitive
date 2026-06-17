@@ -32,7 +32,7 @@ if current_platform.is_cuda():
         def flash_attn_varlen_func(*args: Any, **kwargs: Any) -> Any:  # type: ignore[no-redef,misc]
             raise ImportError(
                 "CUDA vllm_flash_attn is unavailable. This is expected for "
-                "SM75-only 2080 Ti builds that use FlashQLA/FlashInfer/TurboQuant "
+                "SM75-only Tesla T10 builds that use FlashQLA/FlashInfer/TurboQuant "
                 "serving paths instead of vendored FA2. Original error: "
                 f"{_CUDA_FLASH_ATTN_UNAVAILABLE_REASON}"
             )

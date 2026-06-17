@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
-"""Validate runtime components required by the 2080 Ti build.
+"""Validate runtime components required by the Tesla T10 SM75 build.
 
 This is intentionally stricter than a plain import smoke. It is run by
 ``build.sh`` after installation so missing CUDA extensions fail during build

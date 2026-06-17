@@ -2,13 +2,30 @@
 
 Language: English | [简体中文](README.zh-CN.md)
 
-This directory contains launch profiles for vLLM 2080Ti Definitive. A profile
+This directory contains launch profiles for vLLM Tesla T10 Definitive. A profile
 is an `.env` preset for runtime parameters only; it does not include the
 checkpoint path. Choose the model directory separately in `launcher.sh` or with
 `MODEL_DIR=...`.
 
-The shipped context and throughput numbers were validated on 2x RTX 2080 Ti
-22GB cards with tensor parallel size 2.
+Tesla T10 routes are organized by tensor-parallel size under `tp<N>/`. Set
+`GPU_DEVICES` and `TP_SIZE` to the same GPU count when launching (for example
+TP=4 with `GPU_DEVICES=0,1,2,3`).
+
+## Tesla T10 profiles (experimental)
+
+Starting presets for Tesla T10 16GB hosts. Throughput numbers are **not**
+validated yet; run the sweep in
+[Qwen3.6 KV Throughput Sweep (Tesla T10)](../docs/qwen36-kv-throughput-sweep-t10.md)
+before promoting any route.
+
+Tested checkpoint target: GPTQ-INT4, about 19G.
+
+| Profile | TP | Compatible modes | Context | KV | MTP | Status |
+|---|---|---:|---|---:|---:|---|
+| `qwen27b/tp2/normal/int4/int8kv-96K-mtp3-text-only.env` | 2 | normal | 96K | INT8 | 3 | experimental |
+| `qwen27b/tp2/fast/int4/tqk8v4-128K-mtp3-text-only.env` | 2 | fast | 128K | TQK8V4 | 3 | experimental |
+| `qwen27b/tp4/normal/int4/fp16kv-128K-mtp3-text-only.env` | 4 | normal | 128K | FP16 | 3 | experimental |
+| `qwen27b/tp4/normal/int4/int8kv-256K-mtp3-text-only.env` | 4 | normal | 256K | INT8 | 3 | experimental |
 
 Profile layout:
 
@@ -16,7 +33,12 @@ Profile layout:
 profiles/
   templates/
   qwen27b/
-    normal/
+    tp2/
+      normal/int4/
+      fast/int4/
+    tp4/
+      normal/int4/
+    normal/          # legacy 2080 Ti validated routes
       fp8/
       int4/
     fast/
@@ -45,12 +67,13 @@ File names describe the intended route:
 KV positioning:
 
 - `fp16kv`: quality route.
-- `int8kv`: capacity / balance route; currently shipped only as `normal`
-  profiles.
-- `tqk8v4`: TurboQuant K8V4 compression route; currently shipped only for
-  quality-passed `fast` profiles.
+- `int8kv`: capacity / balance route.
+- `tqk8v4`: TurboQuant K8V4 compression route for `fast` profiles.
 
-## Validated Profiles
+## Legacy validated profiles (dual RTX 2080 Ti 22GB, TP=2)
+
+The tables below remain as historical evidence from the original 2080 Ti fork.
+Do **not** deploy them on Tesla T10 without re-validation.
 
 ### FP8
 

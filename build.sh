@@ -355,7 +355,9 @@ check_disk_headroom() {
 check_gpu_hardware() {
   local gpu_summary
   local gpu_count
-  local high_vram_count
+  local t10_count
+  local t10_vram_count
+  local sm75_vram_count
 
   gpu_summary=$(nvidia-smi --query-gpu=name,memory.total --format=csv,noheader 2>/dev/null || true)
   if [[ -z "$gpu_summary" ]]; then
@@ -367,23 +369,35 @@ check_gpu_hardware() {
   echo "$gpu_summary" | sed 's/^/  - /'
 
   gpu_count=$(printf '%s\n' "$gpu_summary" | sed '/^[[:space:]]*$/d' | wc -l)
-  high_vram_count=$(
+  read -r t10_count t10_vram_count sm75_vram_count <<< "$(
     printf '%s\n' "$gpu_summary" |
       awk -F, '
+        function is_t10(name,    n) {
+          n = tolower(name)
+          return (n ~ /tesla[[:space:]]+t10/ || n ~ /(^|[^0-9a-z])t10([^0-9a-z]|$)/)
+        }
         {
           mem = $2
           gsub(/[^0-9]/, "", mem)
-          if (mem + 0 >= 20000) count += 1
+          if (is_t10($1)) {
+            t10 += 1
+            if (mem + 0 >= 15000) t10_vram += 1
+          }
+          if (mem + 0 >= 15000) sm75_vram += 1
         }
-        END { print count + 0 }
+        END {
+          printf "%d %d %d", t10 + 0, t10_vram + 0, sm75_vram + 0
+        }
       '
-  )
+  )"
 
-  if (( gpu_count < 2 || high_vram_count < 2 )); then
-    echo "Preflight: recommended target is two RTX 2080 Ti-class GPUs with about 22GB VRAM each."
-    echo "Preflight: current GPU layout may still build, but validated profiles may not fit or may run slower."
+  if (( t10_count >= 2 && t10_vram_count >= 2 )); then
+    echo "Preflight: GPU layout matches the recommended multi Tesla T10 target (${t10_count} cards detected, ${t10_vram_count} with >=15GB VRAM)."
+  elif (( gpu_count >= 2 && sm75_vram_count >= 2 )); then
+    echo "Preflight: detected ${gpu_count} SM75-class GPUs with >=15GB VRAM; build should work, but Tesla T10 profiles still need validation on this layout."
   else
-    echo "Preflight: GPU layout matches the recommended dual 2080 Ti-class target."
+    echo "Preflight: recommended target is two or more Tesla T10 16GB GPUs (SM75, tensor parallel >=2)."
+    echo "Preflight: current GPU layout may still build, but validated profiles may not fit or may run slower."
   fi
 }
 

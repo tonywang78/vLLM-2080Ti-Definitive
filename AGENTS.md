@@ -1,19 +1,19 @@
 # AGENTS.md
 
-This file governs the whole `vLLM 2080 Ti Definitive Edition` repository.
+This file governs the whole `vLLM Tesla T10 Definitive Edition` repository.
 
 ## Project Identity And Credit
 
-This repository is a hardware-focused fork for dual RTX 2080 Ti / SM75 vLLM
+This repository is a hardware-focused fork for multi-GPU Tesla T10 / SM75 vLLM
 serving. It builds on upstream vLLM and preserves the local runtime work,
-profiles, documentation, and benchmark evidence needed to reproduce the 2080 Ti
-stack.
+profiles, documentation, and benchmark evidence needed to reproduce the Tesla
+T10 stack.
 
 If you publish, redistribute, repackage, benchmark, or build a derivative from
 this repository, keep clear credit to:
 
 - Upstream vLLM and its original license.
-- `vLLM 2080 Ti Definitive Edition`.
+- `vLLM Tesla T10 Definitive Edition`.
 - The repository author: `github.com/weicj`.
 
 Do not remove existing attribution, license notices, benchmark provenance, or
@@ -46,6 +46,8 @@ benchmark guesses.
 - If adding or promoting a profile, include capacity evidence and throughput
   evidence using the repository's documented benchmark口径.
 - Do not keep tiny smoke-only profiles as recommended deployment presets.
+- Tesla T10 profiles live under `profiles/<model>/tp<N>/...`. Mark routes
+  without benchmark evidence as `experimental`.
 
 ## Validation Before Publishing
 
@@ -66,7 +68,7 @@ real benchmark or smoke result that proves the changed path still works.
 
 - Keep English and Simplified Chinese documentation consistent when both exist.
 - Keep benchmark numbers tied to the exact model, KV precision, MTP setting,
-  context, and benchmark method.
+  context, tensor-parallel size, and benchmark method.
 - Restore or update linked assets when moving documentation. Broken benchmark
   figures are treated as documentation regressions.
 - Avoid overstating support. Use precise wording such as `validated`,

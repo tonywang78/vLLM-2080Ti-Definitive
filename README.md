@@ -1,61 +1,61 @@
 <!-- markdownlint-disable MD001 MD041 -->
-# ⚡ vLLM 2080 Ti Definitive Edition
+# ⚡ vLLM Tesla T10 Definitive Edition
 
-![vLLM 2080 Ti Definitive Edition cover](docs/assets/vllm-2080ti-cover.jpg)
+![vLLM Tesla T10 Definitive Edition cover](docs/assets/vllm-2080ti-cover.jpg)
 
-The definitive vLLM runtime for dual RTX 2080 Ti / SM75 serving.
+The definitive vLLM runtime for multi-GPU Tesla T10 / SM75 serving.
 
 This is a hardware-focused fork that preserves the patched source, launch
-profiles, and runtime notes needed to reproduce the working 2080 Ti vLLM stack.
+profiles, and runtime notes needed to reproduce the working Tesla T10 vLLM stack
+on SM75 Turing GPUs.
 
-Fork release: `v0.1.9`
+Fork release: `v0.2.0`
 Base vLLM: `0.21.0`
 
-Headline evidence: Qwen3.6 27B reaches `100+ tok/s` single-request decode on
-the dual 2080 Ti TP=2 runtime.
+Headline target: Qwen3.6 27B on multi Tesla T10 16GB with flexible tensor
+parallel size (TP=2/4/8). Throughput numbers require re-validation on your
+exact GPU count and PCIe topology.
 
 Language: English | [简体中文](README.zh-CN.md)
 
 ![Live single-request throughput demo](docs/assets/vllmspeed.gif)
 
-## 💡 Why RTX 2080 Ti for LLM Inference?
+## 💡 Why Tesla T10 for LLM Inference?
 
-In August 2018, NVIDIA launched the RTX 2080 Ti and moved the enthusiast GPU
-line from GTX into the RTX era. Years later, the card is still remembered as a
-landmark Turing design. With 22GB memory mods, NVLink, high memory bandwidth,
-and enough raw compute to remain relevant, dual 2080 Ti cards turn out to be a
-surprisingly strong local AI inference platform.
+Tesla T10 (TU102, SM75) is a datacenter Turing GPU with 16GB GDDR6 and about
+403 GB/s memory bandwidth. It shares the same compute capability as RTX 2080 Ti
+and other Turing cards, so this fork reuses the validated SM75 kernel stack
+(Marlin, FlashQLA, FlashInfer, TurboQuant/INT8 KV, MTP, CUDAGraph).
 
-| Metric | 2x 2080 Ti 22GB + NVLink | 3090 Ti 24GB baseline | Ratio |
-|---|---:|---:|---:|
-| Physical CUDA core count | 8,704 | 5,376 | 1.62x |
-| SM count | 136 | 84 | 1.62x |
-| Physical Tensor Core count | 1,088 | 336 | 3.24x |
-| Dense Tensor FP16 matrix throughput | 228 TFLOPS | 160 TFLOPS | 1.43x |
-| Total physical memory bandwidth | 1,232 GB/s | 1,008 GB/s | 1.22x |
-| Total VRAM capacity | 44GB | 24GB | 1.83x |
-| Secondary-market price anchor | about $550 with NVLink | about $1,100 | about 0.5x |
+| Metric | Tesla T10 16GB | RTX 2080 Ti 22GB (legacy target) | Notes |
+|---|---:|---:|---|
+| Architecture | TU102 / SM75 | TU102 / SM75 | Same CUDA arch (`7.5`) |
+| VRAM | 16GB | 22GB (modded) | T10 profiles use tighter `GPU_UTIL` |
+| Memory bandwidth | 403 GB/s | 616 GB/s | Expect lower throughput |
+| Tensor cores | 448 | 544 | Slightly lower compute |
+| Interconnect | PCIe P2P typical | NVLink common | Multi-card TP relies on P2P |
+| TDP | 150W | 250W | Easier to pack multiple cards |
 
-The project is built around a simple cost/performance bet: use roughly half the
-secondary-market price of an RTX 3090 Ti to get a dual 22GB RTX 2080 Ti setup
-that can match or exceed it on the physical resources that matter for LLM
-serving, then use vLLM runtime work to turn those resources into real tokens.
+The project optimizes for **multiple Tesla T10 cards** with configurable tensor
+parallel size. TP=2 fits 27B INT4/INT8KV routes on 32GB aggregate VRAM; TP=4
+and TP=8 unlock longer context at the cost of PCIe all-reduce overhead.
 
-That is the first value of this fork: take old but strong Turing silicon and
-make it behave like a serious 27B/31B-class inference platform through Marlin,
-FlashQLA/FlashInfer, TurboQuant/INT8 KV, MTP, and CUDAGraph integration.
+That is the value of this fork: take proven SM75 runtime work and adapt launch
+detection, profiles, and documentation for Tesla T10 multi-GPU hosts.
 
 ## 🧩 Core Routes
 
 Serving shape:
 
-- This project optimizes for extreme single-concurrency performance on dual
-  2080 Ti: one personal-agent style workload, one serious 27B/31B model, and
-  the largest practical context window this hardware can sustain.
+- This project optimizes for extreme single-concurrency performance on multi
+  Tesla T10: one personal-agent style workload, one serious 27B/31B model, and
+  the largest practical context window this hardware can sustain at the chosen TP
+  size.
 - It is not a multi-tenant serving stack. Multi-agent use is supported best as
   queued workspace isolation, not as parallel long-prefill throughput. Long
   prefill work is capacity-safe when tuned, but it is effectively serialized by
-  the runtime scheduler on this TP=2 profile.
+  but in this multi-T10 profile set it is effectively serialized by the runtime
+  scheduler when TP spans multiple GPUs.
 
 Status: 🟢 validated support; 🟡 experimental or partial support; 🔴 known
 failure or clear regression; ⚪ not a target preset or not yet validated.
@@ -97,7 +97,8 @@ better FP16/default-KV headroom than earlier Gemma checkpoints.
 
 This section records checkpoint-level validation. It is intentionally stricter
 than "vLLM can load it": a supported checkpoint can start and generate, while a
-recommended checkpoint also has a useful throughput/context tradeoff on dual 2080 Ti.
+recommended checkpoint also has a useful throughput/context tradeoff on Tesla T10
+at the documented TP size.
 
 | Model route | Weight route | Model cards | Status |
 |---|---|---|---|
@@ -112,17 +113,18 @@ recommended checkpoint also has a useful throughput/context tradeoff on dual 208
 
 ## 🛠️ Target Hardware & Runtime
 
-- Validated GPU profile: dual RTX 2080 Ti 22GB, SM75, NVLink, tensor parallel
-  size 2
+- Validated GPU profile: multi Tesla T10 16GB, SM75, PCIe P2P, tensor parallel
+  size 2/4/8 (flexible; TP must match selected GPU count)
 - Validated host OS: Ubuntu 22.04/24.04 LTS or Debian 12, on Linux kernel 6.x
 - CUDA/PyTorch: CUDA 12.8, `torch 2.11.0+cu128`
-- Fork release: `v0.1.9`
+- Fork release: `v0.2.0`
 - Base vLLM: `0.21.0`
-- Repository identity: `vllm-2080ti-definitive`
-- Runtime identity: `vllm-sm75-tp2-cu128`
-- Compatibility target: NVIDIA Turing / SM75 GPUs. Other Turing cards still
-  need profile validation for VRAM capacity, P2P/NVLink behavior, model
-  head_dim, KV dtype, and CUDAGraph/MTP settings.
+- Repository identity: `vllm-tesla-t10-definitive`
+- Runtime identity: `vllm-sm75-tesla-t10-cu128`
+- Compatibility target: NVIDIA Turing / SM75 GPUs. Tesla T4 is build-compatible
+  but not the primary profile target. Other Turing cards still need profile
+  validation for VRAM capacity, P2P/NVLink behavior, model head_dim, KV dtype,
+  and CUDAGraph/MTP settings.
 
 ## 🚀 How To Use
 
@@ -161,11 +163,12 @@ For scripted use:
 
 ```bash
 MODEL_DIR=/path/to/qwen-or-gemma-checkpoint \
-PROFILE=qwen27b/normal/int4/fp16kv-256K-mtp3-text-only.env \
+PROFILE=qwen27b/tp2/normal/int4/int8kv-96K-mtp3-text-only.env \
 MODE=normal \
 PORT=8000 \
 SERVICE_SCOPE=lan \
-CUDA_VISIBLE_DEVICES=0,1 \
+GPU_DEVICES=0,1,2,3 \
+TP_SIZE=4 \
 ./launcher.sh --non-interactive
 ```
 
@@ -186,10 +189,13 @@ asks whether to run `build.sh` immediately.
 
 ## 🧭 Profiles
 
-Start from [Profile Guide](profiles/README.md). Profiles are organized as
-`profiles/<model>/<mode>/<weight>/<route>.env`, for example
-`qwen27b/normal/int4/fp16kv-256K-mtp3-text-only.env` and
-`qwen27b/fast/int4/tqk8v4-256K-mtp3-text-only.env`.
+Start from [Profile Guide](profiles/README.md). Tesla T10 routes live under
+`profiles/<model>/tp<N>/<mode>/<weight>/<route>.env`, for example
+`qwen27b/tp2/normal/int4/int8kv-96K-mtp3-text-only.env` and
+`qwen27b/tp4/normal/int4/fp16kv-128K-mtp3-text-only.env`.
+
+Legacy 2080 Ti validated routes remain under `profiles/qwen27b/normal/...` for
+reference but are not promoted for Tesla T10 deployment.
 
 Available modes:
 
@@ -215,32 +221,31 @@ Detailed benchmark notes are kept in
 
 **Q: What GPU interconnect is required?**
 
-A: NVLink is recommended, but PCIe P2P is the real baseline requirement. The
-validated system uses NVLink and an intentionally non-ideal PCIe topology, with
-one card at PCIe 3.0 x1 and the other at PCIe 3.0 x4. With NVLink carrying
-GPU-to-GPU traffic, PCIe slot bandwidth is not the main bottleneck. Without
-NVLink, do not treat narrow PCIe links as proven sufficient; confirm P2P
-behavior and benchmark the actual topology.
+A: PCIe peer-to-peer (P2P) is the baseline for multi Tesla T10 tensor parallel.
+NVLink is not available on T10. Confirm topology with `nvidia-smi topo -m`
+before promoting a TP=4/8 route. Without working P2P, multi-GPU TP may fall back
+to slower paths or fail to start.
 
 **Q: Does the host need a strong CPU or a lot of RAM?**
 
 A: It does not need a high-end CPU, but it does prefer a modern CPU with strong
-single-core performance and low platform latency. The validated path has run on
-an Intel Core i3-9100T with 16GB RAM; in contrast, a much older dual Xeon X5675
-host measured about 56 tok/s decode versus about 91 tok/s on the i3-9100T under
-the same 4096/128 GPTQ-INT4 MTP3 route. More RAM mainly helps builds, downloads,
-and compile cache. Because vLLM has a Python/service control plane, very old CPUs
-may be better matched to minimal C++ runtimes such as llama.cpp.
+single-core performance and low platform latency. More RAM mainly helps builds,
+downloads, and compile cache. Because vLLM has a Python/service control plane,
+very old CPUs may be better matched to minimal C++ runtimes such as llama.cpp.
 
-**Q: Which Turing GPUs make sense? Can I mix 11GB and 22GB cards?**
+**Q: Which Turing GPUs make sense? What about Tesla T4?**
 
-A: The fully validated target is dual RTX 2080 Ti 22GB. Other good candidates
-are high-VRAM TU102-class cards: TITAN RTX 24GB, Quadro RTX 6000 24GB, and
-Quadro RTX 8000 48GB, preferably in pairs with NVLink or confirmed PCIe P2P.
-Mixed 11GB + 22GB RTX 2080 Ti setups are not recommended for these 27B/31B
-profiles because vLLM TP=2 is effectively constrained by the smaller rank.
-Smaller Turing cards can run smaller models, but they are not the main target
-for this stack.
+A: The primary validated target is **multi Tesla T10 16GB** with TP matching
+GPU count. Tesla T4 is SM75-compatible and can run smaller models or short
+context routes, but it is not the main profile target for 27B/31B serving.
+Legacy dual RTX 2080 Ti 22GB routes remain documented under
+`profiles/qwen27b/normal/...` for reference.
+
+**Q: How do I select GPUs and TP size?**
+
+A: Set `TARGET_GPU_PATTERN=t10` (default) so the launcher auto-selects all Tesla
+T10 cards, or set `GPU_DEVICES` explicitly. `TP_SIZE` must equal the number of
+selected GPUs. Use menu item 3 or pass both variables in non-interactive mode.
 
 **Q: Which CUDA, PyTorch, and driver versions are validated?**
 
@@ -268,7 +273,7 @@ long prefill or repeated CUDAGraph/AOT compilation runs.
 This repository is a hardware-focused fork of upstream
 [vLLM](https://github.com/vllm-project/vllm), licensed under Apache-2.0. The
 fork keeps the upstream project structure and adds local SM75 runtime patches,
-launch profiles, and validation notes for the dual 2080 Ti route.
+launch profiles, and validation notes for the Tesla T10 multi-GPU route.
 
 Acceleration components used or integrated by this runtime include:
 
@@ -284,6 +289,6 @@ Acceleration components used or integrated by this runtime include:
   acceleration kernels: existing open-source acceleration work integrated and
   profiled for this hardware target.
 
-While this vLLM-2080Ti-Definitive fork won't strictly follow the main fork vLLM,
+While this Tesla T10 fork won't strictly follow the main fork vLLM,
 the patches merged by vLLM update will be re-validated under SM75 specific scope.
 

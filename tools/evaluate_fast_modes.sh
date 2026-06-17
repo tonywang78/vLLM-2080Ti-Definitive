@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT=${ROOT:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)}
 REMOTE_HOST=${REMOTE_HOST:-root@192.168.1.40}
-REMOTE_ROOT=${REMOTE_ROOT:-/data/stable/vllm-sm75-tp2-cu128}
+REMOTE_ROOT=${REMOTE_ROOT:-/data/stable/vllm-sm75-tesla-t10-cu128}
 REMOTE_USER=${REMOTE_USER:-dietpi}
 GPU_DEVICES=${GPU_DEVICES:-1,2}
 PORT=${PORT:-19447}

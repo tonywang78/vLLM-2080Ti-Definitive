@@ -2,12 +2,27 @@
 
 语言：[English](README.md) | 简体中文
 
-这里是 vLLM 2080Ti Definitive 自带的启动 profile。一个 profile 只是运行参数
+这里是 vLLM Tesla T10 Definitive 自带的启动 profile。一个 profile 只是运行参数
 的 `.env` 预设，不包含模型权重路径；权重目录通过 `launcher.sh` 或
 `MODEL_DIR=...` 单独选择。
 
-这里列出的上下文容量和吞吐数据，验证硬件是双 RTX 2080 Ti 22GB，tensor
-parallel size 2。
+Tesla T10 路线按张量并行规模组织在 `tp<N>/` 下。启动时 `GPU_DEVICES` 与
+`TP_SIZE` 必须一致（例如 TP=4 对应 `GPU_DEVICES=0,1,2,3`）。
+
+## Tesla T10 profile（experimental）
+
+面向 Tesla T10 16GB 的起始预设。吞吐数字**尚未**验证；推广任何路线前请先按
+[Tesla T10 KV 吞吐 Sweep](../docs/qwen36-kv-throughput-sweep-t10.zh-CN.md) 跑
+完整 benchmark。
+
+测试权重目标：GPTQ-INT4，约 19G。
+
+| Profile | TP | 兼容模式 | 上下文 | KV | MTP | 状态 |
+|---|---|---:|---|---:|---:|---|
+| `qwen27b/tp2/normal/int4/int8kv-96K-mtp3-text-only.env` | 2 | normal | 96K | INT8 | 3 | experimental |
+| `qwen27b/tp2/fast/int4/tqk8v4-128K-mtp3-text-only.env` | 2 | fast | 128K | TQK8V4 | 3 | experimental |
+| `qwen27b/tp4/normal/int4/fp16kv-128K-mtp3-text-only.env` | 4 | normal | 128K | FP16 | 3 | experimental |
+| `qwen27b/tp4/normal/int4/int8kv-256K-mtp3-text-only.env` | 4 | normal | 256K | INT8 | 3 | experimental |
 
 目录结构：
 
@@ -15,7 +30,12 @@ parallel size 2。
 profiles/
   templates/
   qwen27b/
-    normal/
+    tp2/
+      normal/int4/
+      fast/int4/
+    tp4/
+      normal/int4/
+    normal/          # 2080 Ti 历史验证路线
       fp8/
       int4/
     fast/
@@ -44,10 +64,13 @@ profiles/
 KV 精度定位：
 
 - `fp16kv`：质量路线。
-- `int8kv`：容量 / 平衡路线；当前只作为 `normal` profile 保留。
-- `tqk8v4`：TurboQuant K8V4 压缩路线；当前只保留质量通过的 `fast` profile。
+- `int8kv`：容量 / 平衡路线。
+- `tqk8v4`：TurboQuant K8V4 压缩路线，用于 `fast` profile。
 
-## 已验证 Profile
+## 历史验证 profile（双 RTX 2080 Ti 22GB，TP=2）
+
+下表保留原 2080 Ti fork 的 benchmark 证据。在 Tesla T10 上**不要**直接部署，
+除非重新验证。
 
 ### FP8
 

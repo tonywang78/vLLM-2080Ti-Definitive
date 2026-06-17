@@ -595,6 +595,25 @@ gpu_device_count() {
   echo "$count"
 }
 
+validate_tensor_parallel_config() {
+  local gpu_count tp_size
+  gpu_count=$(gpu_device_count "${GPU_DEVICES:-}")
+  tp_size=${TP_SIZE:-$gpu_count}
+
+  if (( gpu_count < 1 )); then
+    echo "ERROR: At least one GPU must be selected in GPU_DEVICES." >&2
+    return 1
+  fi
+
+  if (( tp_size != gpu_count )); then
+    echo "ERROR: TP_SIZE ($tp_size) must match the number of selected GPUs ($gpu_count) in GPU_DEVICES=${GPU_DEVICES:-}." >&2
+    return 1
+  fi
+
+  TP_SIZE=$tp_size
+  return 0
+}
+
 list_nvidia_gpus() {
   command -v nvidia-smi >/dev/null 2>&1 || return 1
   nvidia-smi --query-gpu=index,name --format=csv,noheader 2>/dev/null |
@@ -1060,7 +1079,7 @@ show_help() {
   fi
   banner
   cat <<'EOF'
-This is the vLLM 2080 Ti Definitive service manager for a source checkout.
+This is the vLLM Tesla T10 Definitive service manager for a source checkout.
 
 Main menu:
   1. Weight directory: choose the checkpoint directory.
@@ -1150,28 +1169,49 @@ current_profile_label() {
 }
 
 detect_default_gpu_devices() {
-  local detected
+  local detected pattern all_gpus
+  pattern=${TARGET_GPU_PATTERN:-t10}
   detected=$(
     list_nvidia_gpus 2>/dev/null |
-      awk -F'\t' '
+      awk -F'\t' -v pattern="$pattern" '
         BEGIN { sep = "" }
-        tolower($2) ~ /2080[[:space:]]*ti/ {
+        function gpu_matches(name,    n, p) {
+          n = tolower(name)
+          p = tolower(pattern)
+          if (p == "t10") {
+            return (n ~ /tesla[[:space:]]+t10/ || n ~ /(^|[^0-9a-z])t10([^0-9a-z]|$)/)
+          }
+          if (p == "t4") {
+            return (n ~ /tesla[[:space:]]+t4/ || n ~ /(^|[^0-9a-z])t4([^0-9a-z]|$)/)
+          }
+          if (p == "2080ti") {
+            return (n ~ /2080[[:space:]]*ti/)
+          }
+          return (index(n, p) > 0)
+        }
+        gpu_matches($2) {
           out = out sep $1
           sep = ","
-          count++
-          if (count == 2) {
-            print out
-            exit
-          }
         }
+        END { print out }
       '
   ) || true
   if [[ -n "$detected" ]]; then
     printf '%s\n' "$detected"
-  elif [[ -n "${CUDA_VISIBLE_DEVICES:-}" ]]; then
+    return 0
+  fi
+  if [[ -n "${CUDA_VISIBLE_DEVICES:-}" ]]; then
     printf '%s\n' "$CUDA_VISIBLE_DEVICES"
+    return 0
+  fi
+  all_gpus=$(
+    list_nvidia_gpus 2>/dev/null |
+      awk -F'\t' 'BEGIN { sep = "" } { out = out sep $1; sep = "," } END { print out }'
+  ) || true
+  if [[ -n "$all_gpus" ]]; then
+    printf '%s\n' "$all_gpus"
   else
-    printf '0,1\n'
+    printf '0\n'
   fi
 }
 
@@ -2568,7 +2608,7 @@ build_args() {
     --model "$MODEL_DIR"
     --served-model-name "$SERVED_NAME"
     --dtype half
-    --tensor-parallel-size "${TP_SIZE:-2}"
+    --tensor-parallel-size "${TP_SIZE:-$(gpu_device_count "${GPU_DEVICES:-}")}"
     --generation-config vllm
     --gpu-memory-utilization "$GPU_UTIL"
     --max-model-len "$MAX_MODEL_LEN"
@@ -2871,6 +2911,9 @@ launch_server() {
   fi
   GPU_DEVICES=${GPU_DEVICES:-$(detect_default_gpu_devices)}
   TP_SIZE=${TP_SIZE:-$(gpu_device_count "$GPU_DEVICES")}
+  if ! validate_tensor_parallel_config; then
+    return 1
+  fi
   if [[ -z "${SERVED_NAME:-}" || "$SERVED_NAME" == "." || "$SERVED_NAME" == "/" ]]; then
     echo "ERROR: Served model name is empty. Set SERVED_NAME or choose a valid checkpoint directory." >&2
     return 1
@@ -3130,6 +3173,7 @@ prepare_runtime_defaults() {
   TEMPLATE_DIR=${TEMPLATE_DIR:-"$PROFILE_DIR/templates"}
   GPU_DEVICES=${GPU_DEVICES:-$(detect_default_gpu_devices)}
   TP_SIZE=${TP_SIZE:-$(gpu_device_count "$GPU_DEVICES")}
+  validate_tensor_parallel_config || return 1
   QUANTIZATION=${QUANTIZATION:-$(guess_quantization "$MODEL_DIR")}
   MAX_MODEL_LEN=${MAX_MODEL_LEN:-$(default_context_tokens)}
   GPU_UTIL=${GPU_UTIL:-$(default_gpu_util)}
